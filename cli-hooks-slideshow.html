@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hooks in AI Coding CLIs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e14;
+    --panel:#0f141d;
+    --panel-2:#131a25;
+    --ink:#e6edf3;
+    --muted:#8b97a7;
+    --faint:#5a6677;
+    --line:#1e2735;
+    --grid:rgba(120,160,210,.045);
+    --phos:#5ad1a0;          /* terminal phosphor / primary accent */
+    --phos-dim:#2c6e54;
+    --claude:#d97757;        /* Anthropic clay */
+    --codex:#1fb98c;         /* OpenAI teal-green */
+    --copilot:#a371f7;       /* GitHub violet */
+    --amber:#e3b341;
+    --red:#f0726a;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --sans:'IBM Plex Sans',system-ui,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ambient grid + glow */
+  .bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+  .bg::before{
+    content:"";position:absolute;inset:0;
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:46px 46px;
+    mask-image:radial-gradient(ellipse 120% 90% at 50% 40%,#000 55%,transparent 100%);
+  }
+  .bg::after{
+    content:"";position:absolute;top:-20%;left:50%;transform:translateX(-50%);
+    width:900px;height:600px;border-radius:50%;
+    background:radial-gradient(circle,rgba(90,209,160,.10),transparent 60%);
+    filter:blur(40px);
+  }
+
+  .deck{position:relative;z-index:1;height:100vh;width:100vw}
+  .slide{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;
+    padding:clamp(28px,5vw,84px);
+    padding-top:clamp(54px,7vh,92px);
+    opacity:0;visibility:hidden;
+    transform:translateY(14px);
+    transition:opacity .5s ease,transform .5s ease,visibility .5s;
+  }
+  .slide.active{opacity:1;visibility:visible;transform:none}
+  .slide.active .reveal{animation:rise .6s cubic-bezier(.2,.7,.2,1) both}
+  .slide.active .reveal:nth-child(2){animation-delay:.06s}
+  .slide.active .reveal:nth-child(3){animation-delay:.12s}
+  .slide.active .reveal:nth-child(4){animation-delay:.18s}
+  .slide.active .reveal:nth-child(5){animation-delay:.24s}
+  .slide.active .reveal:nth-child(6){animation-delay:.30s}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+  /* top status bar */
+  .topbar{
+    position:fixed;top:0;left:0;right:0;z-index:5;
+    display:flex;align-items:center;gap:14px;
+    padding:14px clamp(20px,4vw,40px);
+    font-family:var(--mono);font-size:12px;color:var(--faint);
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(10,14,20,.9),rgba(10,14,20,.4));
+    backdrop-filter:blur(6px);
+  }
+  .dot{width:11px;height:11px;border-radius:50%;background:#2a3340;border:1px solid #38424f}
+  .dots{display:flex;gap:7px}
+  .dots .dot:nth-child(1){background:#3a2622}
+  .dots .dot:nth-child(2){background:#3a3322}
+  .dots .dot:nth-child(3){background:#223a2c}
+  .topbar .path{color:var(--muted)}
+  .topbar .blink{color:var(--phos);animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .topbar .spacer{flex:1}
+
+  h1,h2,h3{font-family:var(--mono);font-weight:600;letter-spacing:-.02em;line-height:1.05}
+  .kicker{
+    font-family:var(--mono);font-size:13px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--phos);margin-bottom:18px;display:flex;align-items:center;gap:10px;
+  }
+  .kicker::before{content:"";width:26px;height:1px;background:var(--phos);display:inline-block}
+  .slide h2{font-size:clamp(26px,4vw,46px);margin-bottom:22px}
+  .lead{font-size:clamp(15px,1.5vw,20px);color:var(--muted);max-width:62ch;line-height:1.6;font-weight:300}
+  strong,b{color:var(--ink);font-weight:600}
+  em{color:var(--phos);font-style:normal}
+
+  /* TITLE slide */
+  .hero{justify-content:center}
+  .hero .glyph{font-family:var(--mono);font-size:clamp(40px,8vw,104px);font-weight:700;line-height:.95;letter-spacing:-.04em}
+  .hero .glyph .hk{color:var(--phos)}
+  .hero .sub{margin-top:26px;font-size:clamp(15px,1.8vw,22px);color:var(--muted);font-weight:300;max-width:60ch;line-height:1.5}
+  .hero .tools{margin-top:40px;display:flex;flex-wrap:wrap;gap:12px;font-family:var(--mono);font-size:14px}
+  .tag{padding:8px 15px;border:1px solid var(--line);border-radius:7px;background:var(--panel);display:flex;align-items:center;gap:9px}
+  .tag .sw{width:9px;height:9px;border-radius:50%}
+  .tag.c1 .sw{background:var(--claude)} .tag.c2 .sw{background:var(--codex)} .tag.c3 .sw{background:var(--copilot)}
+
+  /* generic content */
+  .body{margin-top:8px;overflow:auto}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:6px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:6px}
+  @media(max-width:880px){.grid2,.grid3{grid-template-columns:1fr}}
+
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:22px 22px;position:relative;overflow:hidden;
+  }
+  .card .ct{font-family:var(--mono);font-size:15px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:9px}
+  .card p{color:var(--muted);font-size:14.5px;line-height:1.55;font-weight:300}
+  .card .bar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--phos)}
+  .card.claude .bar{background:var(--claude)} .card.claude .ct{color:var(--claude)}
+  .card.codex .bar{background:var(--codex)} .card.codex .ct{color:var(--codex)}
+  .card.copilot .bar{background:var(--copilot)} .card.copilot .ct{color:var(--copilot)}
+
+  ul.feat{list-style:none;margin-top:6px;display:flex;flex-direction:column;gap:13px}
+  ul.feat li{display:flex;gap:13px;font-size:15.5px;color:var(--muted);line-height:1.5;font-weight:300}
+  ul.feat li::before{content:"▸";color:var(--phos);font-family:var(--mono);flex:0 0 auto}
+  ul.feat li strong{color:var(--ink)}
+
+  /* code block */
+  pre{
+    font-family:var(--mono);font-size:13px;line-height:1.6;
+    background:#070b11;border:1px solid var(--line);border-radius:10px;
+    padding:16px 18px;overflow:auto;color:#cdd9e5;margin-top:4px;
+  }
+  pre .cm{color:var(--faint)}
+  pre .k{color:var(--phos)}
+  pre .s{color:var(--amber)}
+  pre .d{color:var(--red)}
+  .codehdr{font-family:var(--mono);font-size:12px;color:var(--faint);margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .codehdr .sw{width:8px;height:8px;border-radius:50%}
+
+  /* flow / lifecycle */
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin-top:10px;font-family:var(--mono)}
+  .step{
+    background:var(--panel);border:1px solid var(--line);border-radius:9px;
+    padding:13px 15px;font-size:13px;display:flex;flex-direction:column;gap:4px;min-width:120px;
+  }
+  .step .lbl{color:var(--ink);font-weight:600}
+  .step .ds{color:var(--faint);font-size:11px;font-weight:400}
+  .arrow{display:flex;align-items:center;color:var(--phos-dim);font-family:var(--mono);padding:0 10px;font-size:18px}
+  .loop{border:1px dashed var(--phos-dim);border-radius:10px;padding:11px;display:flex;align-items:center;gap:0;margin:0 4px}
+  .loop .ltag{writing-mode:vertical-rl;font-size:10px;color:var(--phos);letter-spacing:.1em;text-transform:uppercase;margin-right:8px}
+
+  /* anatomy */
+  .anat{display:flex;flex-direction:column;gap:14px;margin-top:6px;font-family:var(--mono)}
+  .anode{display:flex;align-items:center;gap:18px}
+  .anum{flex:0 0 auto;width:42px;height:42px;border-radius:9px;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;color:var(--phos);font-weight:700}
+  .anode .at{font-size:16px;color:var(--ink);font-weight:600}
+  .anode .ax{font-size:13.5px;color:var(--muted);font-weight:300;font-family:var(--sans)}
+  .anode code{background:var(--panel-2);border:1px solid var(--line);padding:1px 7px;border-radius:5px;color:var(--phos);font-size:12.5px}
+
+  /* table */
+  .tbl{width:100%;border-collapse:collapse;margin-top:8px;font-size:13.5px;font-family:var(--mono)}
+  .tbl th,.tbl td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--line)}
+  .tbl thead th{color:var(--muted);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:500;border-bottom:1px solid #2a3545}
+  .tbl tbody td:first-child{color:var(--ink);font-weight:500}
+  .tbl .yes{color:var(--phos);font-weight:700}
+  .tbl .no{color:#3f4a59}
+  .tbl .part{color:var(--amber)}
+  .tbl .hc1{color:var(--claude)} .tbl .hc2{color:var(--codex)} .tbl .hc3{color:var(--copilot)}
+  .tbl tbody tr:hover{background:rgba(120,160,210,.03)}
+  .legend{display:flex;gap:18px;margin-top:14px;font-family:var(--mono);font-size:12px;color:var(--faint);flex-wrap:wrap}
+  .legend span b{font-weight:700}
+
+  .pill{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);padding:5px 11px;border-radius:20px}
+  .pillrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+
+  .note{margin-top:16px;font-family:var(--mono);font-size:12.5px;color:var(--faint);border-left:2px solid var(--phos-dim);padding:6px 0 6px 14px;line-height:1.55}
+  .note b{color:var(--phos)}
+
+  /* nav */
+  .nav{position:fixed;bottom:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:16px;
+    padding:13px clamp(20px,4vw,40px);border-top:1px solid var(--line);
+    background:linear-gradient(0deg,rgba(10,14,20,.92),rgba(10,14,20,.3));backdrop-filter:blur(6px)}
+  .progress{flex:1;height:2px;background:var(--line);border-radius:2px;overflow:hidden}
+  .progress i{display:block;height:100%;background:var(--phos);transition:width .45s ease;box-shadow:0 0 10px var(--phos)}
+  .counter{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:62px;text-align:right}
+  .navbtns{display:flex;gap:8px}
+  .nb{width:36px;height:32px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--muted);
+    font-family:var(--mono);cursor:pointer;transition:.18s;display:grid;place-items:center;font-size:15px}
+  .nb:hover{border-color:var(--phos-dim);color:var(--phos)}
+  .nb:disabled{opacity:.3;cursor:default}
+  .hint{position:fixed;bottom:58px;right:18px;z-index:5;font-family:var(--mono);font-size:11px;color:var(--faint);opacity:.7}
+
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:4px}
+  @media(max-width:880px){.twocol{grid-template-columns:1fr}}
+  .minih{font-family:var(--mono);font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .minih .sw{width:9px;height:9px;border-radius:50%}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+
+<div class="topbar">
+  <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+  <span class="path">~/hooks</span>
+  <span style="color:var(--faint)">on</span>
+  <span style="color:var(--phos)">⎇ main</span>
+  <span class="spacer"></span>
+  <span id="tb-title">hooks.json</span>
+  <span class="blink">▍</span>
+</div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 TITLE -->
+  <section class="slide hero active">
+    <div class="reveal kicker">Engineering Deep-Dive · 20 slides</div>
+    <div class="reveal glyph">on_<span class="hk">hook</span>()</div>
+    <div class="reveal sub">How hooks work in agentic coding CLIs — the deterministic layer that wraps the model loop with your own scripts and policies.</div>
+    <div class="reveal tools">
+      <span class="tag c1"><span class="sw"></span>Claude Code</span>
+      <span class="tag c2"><span class="sw"></span>OpenAI Codex CLI</span>
+      <span class="tag c3"><span class="sw"></span>GitHub Copilot CLI</span>
+    </div>
+  </section>
+
+  <!-- 2 WHAT IS A HOOK -->
+  <section class="slide">
+    <div class="reveal kicker">01 · Concept</div>
+    <h2 class="reveal">What is a hook?</h2>
+    <p class="reveal lead">A hook is a user-defined <strong>script, HTTP endpoint, or prompt</strong> that the CLI runs automatically at a specific point in its lifecycle — before a tool runs, when a session starts, when the agent tries to stop, and so on.</p>
+    <div class="reveal grid3" style="margin-top:28px">
+      <div class="card"><span class="bar"></span><div class="ct">⚙ Outside the model</div><p>Hooks are plain code triggered by events, not text the model interprets. They run reliably regardless of how the agent was prompted.</p></div>
+      <div class="card"><span class="bar"></span><div class="ct">⟳ Deterministic</div><p>Same event, same input, same outcome — every time. No "the model usually remembers to."</p></div>
+      <div class="card"><span class="bar"></span><div class="ct">🔑 Your permissions</div><p>Hooks execute as you, with no extra sandbox. They can format, test, log, block, or inject context.</p></div>
+    </div>
+  </section>
+
+  <!-- 3 INSTRUCTION VS ENFORCEMENT -->
+  <section class="slide">
+    <div class="reveal kicker">02 · Why they matter</div>
+    <h2 class="reveal">Instruction → Enforcement</h2>
+    <p class="reveal lead">The essence of hooks is the shift from <em>guiding</em> the agent to <em>guaranteeing</em> behaviour. A rule in <code style="font-family:var(--mono);color:var(--phos)">CLAUDE.md</code> / <code style="font-family:var(--mono);color:var(--phos)">AGENTS.md</code> is a suggestion; a hook is a gate.</p>
+    <div class="reveal twocol" style="margin-top:26px">
+      <div class="card"><span class="bar" style="background:var(--amber)"></span><div class="ct" style="color:var(--amber)">Custom instructions</div>
+        <pre style="margin-top:8px"><span class="cm"># probabilistic</span>
+"Please don't run destructive
+ commands like rm -rf."</pre>
+        <p style="margin-top:10px">Depends on the model choosing to comply.</p>
+      </div>
+      <div class="card"><span class="bar"></span><div class="ct">PreToolUse hook</div>
+        <pre style="margin-top:8px"><span class="cm"># deterministic</span>
+<span class="k">if</span> cmd matches 'rm -rf':
+    <span class="d">deny</span>  <span class="cm"># blocked, always</span></pre>
+        <p style="margin-top:10px">The command never executes — by construction.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 ANATOMY -->
+  <section class="slide">
+    <div class="reveal kicker">03 · Structure</div>
+    <h2 class="reveal">Anatomy of a hook</h2>
+    <p class="reveal lead">All three CLIs share the same three-level shape. You pick an event, narrow it with a matcher, and attach one or more handlers.</p>
+    <div class="reveal anat" style="margin-top:26px">
+      <div class="anode"><div class="anum">1</div><div><div class="at">Event</div><div class="ax">The lifecycle moment that fires the hook — <code>SessionStart</code>, <code>PreToolUse</code>, <code>Stop</code> …</div></div></div>
+      <div class="anode"><div class="anum">2</div><div><div class="at">Matcher</div><div class="ax">Optional filter that narrows when it runs — e.g. tool name <code>Bash</code>, or regex <code>Edit|Write</code>.</div></div></div>
+      <div class="anode"><div class="anum">3</div><div><div class="at">Handler</div><div class="ax">What actually runs — a shell command, HTTP POST, MCP tool, or an LLM prompt that returns a decision.</div></div></div>
+    </div>
+    <div class="reveal note">Configuration is JSON (Claude Code, Copilot) or JSON / inline TOML (Codex). Multiple matching handlers for one event run in parallel.</div>
+  </section>
+
+  <!-- 5 LIFECYCLE -->
+  <section class="slide">
+    <div class="reveal kicker">04 · Lifecycle</div>
+    <h2 class="reveal">Where events fire</h2>
+    <p class="reveal lead">Events fall into three cadences: <strong>once per session</strong>, <strong>once per turn</strong>, and <strong>once per tool call</strong> inside the agentic loop.</p>
+    <div class="reveal flow" style="margin-top:30px;align-items:center">
+      <div class="step"><span class="lbl">SessionStart</span><span class="ds">per session</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="lbl">UserPromptSubmit</span><span class="ds">per turn</span></div>
+      <div class="arrow">→</div>
+      <div class="loop">
+        <span class="ltag">agentic loop</span>
+        <div class="step"><span class="lbl">PreToolUse</span><span class="ds">before tool</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><span class="lbl">PostToolUse</span><span class="ds">after tool</span></div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="lbl">Stop</span><span class="ds">per turn</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><span class="lbl">SessionEnd</span><span class="ds">per session</span></div>
+    </div>
+    <div class="reveal note" style="margin-top:30px">Around the edges sit observability + control events: <b>Notification</b>, <b>PreCompact / PostCompact</b>, <b>SubagentStart / SubagentStop</b>, and (Copilot) <b>errorOccurred</b>.</div>
+  </section>
+
+  <!-- 6 HANDLER TYPES -->
+  <section class="slide">
+    <div class="reveal kicker">05 · Handler types</div>
+    <h2 class="reveal">Five ways a hook can run</h2>
+    <p class="reveal lead">Claude Code supports the full spectrum; Codex and Copilot are <strong>command-centric</strong> today.</p>
+    <div class="reveal grid3" style="margin-top:22px">
+      <div class="card"><span class="bar"></span><div class="ct">command</div><p>Run a shell script. Input arrives on <code style="color:var(--phos);font-family:var(--mono)">stdin</code> as JSON; results return via exit code + stdout. <strong>All three CLIs.</strong></p></div>
+      <div class="card"><span class="bar"></span><div class="ct">http</div><p>POST the event JSON to a URL; the response body carries the decision. <strong>Claude Code</strong> (emerging in Copilot).</p></div>
+      <div class="card"><span class="bar"></span><div class="ct">mcp_tool</div><p>Call a tool on a connected MCP server. <strong>Claude Code.</strong></p></div>
+      <div class="card claude"><span class="bar"></span><div class="ct">prompt</div><p>Send the event to a fast model for a single-turn yes/no judgment. <strong>Claude Code only.</strong></p></div>
+      <div class="card claude"><span class="bar"></span><div class="ct">agent</div><p>Spawn a subagent that can Read/Grep/Glob to verify a condition. <strong>Claude Code only (experimental).</strong></p></div>
+      <div class="card"><span class="bar" style="background:var(--phos-dim)"></span><div class="ct" style="color:var(--muted)">⌁ Why it matters</div><p>Command = deterministic checks. Prompt / agent = semantic judgment. Choose by how much reasoning the gate needs.</p></div>
+    </div>
+  </section>
+
+  <!-- 7 COMMON TAXONOMY -->
+  <section class="slide">
+    <div class="reveal kicker">06 · Shared vocabulary</div>
+    <h2 class="reveal">The common event taxonomy</h2>
+    <p class="reveal lead">Despite different ecosystems, the three tools converge on a near-identical naming scheme — which makes hook knowledge portable.</p>
+    <div class="reveal pillrow" style="margin-top:24px">
+      <span class="pill">SessionStart</span>
+      <span class="pill">SessionEnd</span>
+      <span class="pill">UserPromptSubmit</span>
+      <span class="pill">PreToolUse</span>
+      <span class="pill">PostToolUse</span>
+      <span class="pill">Stop</span>
+      <span class="pill">SubagentStop</span>
+      <span class="pill">PreCompact</span>
+      <span class="pill">Notification</span>
+      <span class="pill">PermissionRequest</span>
+      <span class="pill">errorOccurred</span>
+    </div>
+    <div class="reveal note" style="margin-top:28px">Naming varies slightly: Copilot uses <b>camelCase</b> (<code style="font-family:var(--mono);color:var(--phos)">preToolUse</code>, <code style="font-family:var(--mono);color:var(--phos)">userPromptSubmitted</code>); Claude Code & Codex use <b>PascalCase</b>. The control point is the same: <b>PreToolUse</b> is the universal blocking gate.</div>
+  </section>
+
+  <!-- 8 CLAUDE OVERVIEW -->
+  <section class="slide">
+    <div class="reveal kicker" style="color:var(--claude)"><span style="background:var(--claude);width:26px;height:1px;display:inline-block"></span>Tool 1 of 3</div>
+    <h2 class="reveal" style="color:var(--claude)">Claude Code</h2>
+    <p class="reveal lead">The most mature and extensive hook system — 20+ lifecycle events and all five handler types.</p>
+    <div class="reveal twocol" style="margin-top:24px">
+      <ul class="feat">
+        <li><strong>Config in layered JSON:</strong> <code style="font-family:var(--mono);color:var(--claude)">~/.claude/settings.json</code> (user), <code style="font-family:var(--mono);color:var(--claude)">.claude/settings.json</code> (project), <code style="font-family:var(--mono);color:var(--claude)">.local.json</code>, plugins, and skill / agent frontmatter.</li>
+        <li><strong>Matcher + <code style="font-family:var(--mono);color:var(--claude)">if</code> rule:</strong> filter by tool name, then by permission-rule syntax like <code style="font-family:var(--mono);color:var(--claude)">Bash(git *)</code>.</li>
+      </ul>
+      <ul class="feat">
+        <li><strong>Rich decision control:</strong> PreToolUse can <em>allow / deny / ask / defer</em> and even rewrite tool input before it runs.</li>
+        <li><strong>Unique handlers:</strong> prompt & agent hooks delegate judgment to a model — "is this tool use appropriate?"</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 9 CLAUDE EVENTS -->
+  <section class="slide">
+    <div class="reveal kicker" style="color:var(--claude)"><span style="background:var(--claude);width:26px;height:1px;display:inline-block"></span>Claude Code · events</div>
+    <h2 class="reveal" style="color:var(--claude)">Supported events</h2>
+    <p class="reveal lead">A deep taxonomy spanning the full agent lifecycle. The most-used set:</p>
+    <div class="reveal grid3" style="margin-top:20px">
+      <div class="card claude"><span class="bar"></span><div class="ct">Session</div><p><code style="font-family:var(--mono)">SessionStart</code> · <code style="font-family:var(--mono)">SessionEnd</code> · <code style="font-family:var(--mono)">Setup</code> · <code style="font-family:var(--mono)">InstructionsLoaded</code></p></div>
+      <div class="card claude"><span class="bar"></span><div class="ct">Turn</div><p><code style="font-family:var(--mono)">UserPromptSubmit</code> · <code style="font-family:var(--mono)">Stop</code> · <code style="font-family:var(--mono)">StopFailure</code></p></div>
+      <div class="card claude"><span class="bar"></span><div class="ct">Tool loop</div><p><code style="font-family:var(--mono)">PreToolUse</code> · <code style="font-family:var(--mono)">PostToolUse</code> · <code style="font-family:var(--mono)">PermissionRequest</code> · <code style="font-family:var(--mono)">PostToolBatch</code></p></div>
+      <div class="card claude"><span class="bar"></span><div class="ct">Subagents</div><p><code style="font-family:var(--mono)">SubagentStart</code> · <code style="font-family:var(--mono)">SubagentStop</code> · <code style="font-family:var(--mono)">TaskCreated / Completed</code></p></div>
+      <div class="card claude"><span class="bar"></span><div class="ct">Context</div><p><code style="font-family:var(--mono)">PreCompact</code> · <code style="font-family:var(--mono)">PostCompact</code> · <code style="font-family:var(--mono)">Notification</code></p></div>
+      <div class="card claude"><span class="bar"></span><div class="ct">Reactive</div><p><code style="font-family:var(--mono)">FileChanged</code> · <code style="font-family:var(--mono)">CwdChanged</code> · <code style="font-family:var(--mono)">ConfigChange</code> · <code style="font-family:var(--mono)">Elicitation</code></p></div>
+    </div>
+    <div class="reveal note">Exit 2 blocks where it makes sense (PreToolUse, UserPromptSubmit, Stop, PreCompact …). Post-events can't undo, but can feed context back to the model.</div>
+  </section>
+
+  <!-- 10 CODEX OVERVIEW -->
+  <section class="slide">
+    <div class="reveal kicker" style="color:var(--codex)"><span style="background:var(--codex);width:26px;height:1px;display:inline-block"></span>Tool 2 of 3</div>
+    <h2 class="reveal" style="color:var(--codex)">OpenAI Codex CLI</h2>
+    <p class="reveal lead">A Claude-style hooks engine, currently <strong>experimental</strong> and under active development.</p>
+    <div class="reveal twocol" style="margin-top:24px">
+      <ul class="feat">
+        <li><strong>Behind a feature flag:</strong> enable with <code style="font-family:var(--mono);color:var(--codex)">[features] codex_hooks = true</code> in <code style="font-family:var(--mono);color:var(--codex)">config.toml</code>.</li>
+        <li><strong>Two config forms:</strong> <code style="font-family:var(--mono);color:var(--codex)">hooks.json</code> next to a config layer, <em>or</em> inline <code style="font-family:var(--mono);color:var(--codex)">[[hooks.PreToolUse]]</code> tables in TOML.</li>
+      </ul>
+      <ul class="feat">
+        <li><strong>Locations:</strong> <code style="font-family:var(--mono);color:var(--codex)">~/.codex/</code> (user) and <code style="font-family:var(--mono);color:var(--codex)">&lt;repo&gt;/.codex/</code> (project, must be trusted).</li>
+        <li><strong>Command handlers only;</strong> hooks must be <em>trusted</em> to run; Windows support is temporarily disabled.</li>
+      </ul>
+    </div>
+    <div class="reveal note" style="border-color:var(--codex)">Separately, Codex has a <b>notify</b> setting — a command that receives a JSON payload for desktop notifications, independent of the hooks engine.</div>
+  </section>
+
+  <!-- 11 CODEX EVENTS -->
+  <section class="slide">
+    <div class="reveal kicker" style="color:var(--codex)"><span style="background:var(--codex);width:26px;height:1px;display:inline-block"></span>Codex · events</div>
+    <h2 class="reveal" style="color:var(--codex)">Supported events</h2>
+    <p class="reveal lead">The documented, working set today — turn-scoped and session-scoped:</p>
+    <div class="reveal grid3" style="margin-top:20px">
+      <div class="card codex"><span class="bar"></span><div class="ct">SessionStart</div><p>Matcher = <code style="font-family:var(--mono)">startup | resume</code>. Inject developer context via stdout or <code style="font-family:var(--mono)">additionalContext</code>.</p></div>
+      <div class="card codex"><span class="bar"></span><div class="ct">UserPromptSubmit</div><p>Add context or block the prompt. Matcher not used.</p></div>
+      <div class="card codex"><span class="bar"></span><div class="ct">PreToolUse ⚑</div><p>Can <em>deny</em> a command. Currently intercepts <strong>Bash only</strong> — a guardrail, not a complete boundary.</p></div>
+      <div class="card codex"><span class="bar"></span><div class="ct">PostToolUse</div><p>Bash results only. <code style="font-family:var(--mono)">block</code> replaces the tool result with feedback and continues.</p></div>
+      <div class="card codex"><span class="bar"></span><div class="ct">Stop</div><p><code style="font-family:var(--mono)">decision:"block"</code> doesn't reject — it spins up a <em>continuation prompt</em> to keep working.</p></div>
+      <div class="card codex"><span class="bar" style="background:var(--phos-dim)"></span><div class="ct" style="color:var(--muted)">SubagentStart</div><p>Fires at subagent-start scope. (Advanced config also references PermissionRequest & Pre/PostCompact.)</p></div>
+    </div>
+  </section>
+
+  <!-- 12 COPILOT OVERVIEW -->
+  <section class="slide">
+    <div class="reveal kicker" style="color:var(--copilot)"><span style="background:var(--copilot);width:26px;height:1px;display:inline-block"></span>Tool 3 of 3</div>
+    <h2 class="reveal" style="color:var(--copilot)">GitHub Copilot CLI</h2>
+    <p class="reveal lead">A <strong>repository-native</strong> hook system shared between Copilot CLI and the cloud Coding Agent — the repo is the policy boundary.</p>
+    <div class="reveal twocol" style="margin-top:24px">
+      <ul class="feat">
+        <li><strong>Config in <code style="font-family:var(--mono);color:var(--copilot)">.github/hooks/*.json</code></strong> with <code style="font-family:var(--mono);color:var(--copilot)">"version": 1</code>. CLI loads from your working directory; the cloud agent reads from the default branch.</li>
+        <li><strong>Command-only</strong> (<code style="font-family:var(--mono);color:var(--copilot)">type: "command"</code>), committed to git and reviewed like any other code.</li>
+      </ul>
+      <ul class="feat">
+        <li><strong>Cross-platform by design:</strong> each handler carries a <code style="font-family:var(--mono);color:var(--copilot)">bash</code> key and a <code style="font-family:var(--mono);color:var(--copilot)">powershell</code> key (pwsh 7+ on Windows).</li>
+        <li><strong>Sequential execution;</strong> the first non-zero exit halts the chain.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 13 COPILOT EVENTS -->
+  <section class="slide">
+    <div class="reveal kicker" style="color:var(--copilot)"><span style="background:var(--copilot);width:26px;height:1px;display:inline-block"></span>Copilot CLI · events</div>
+    <h2 class="reveal" style="color:var(--copilot)">Supported events</h2>
+    <p class="reveal lead">Six documented events. Only <strong>preToolUse</strong> can block — every other event is observational.</p>
+    <div class="reveal grid3" style="margin-top:20px">
+      <div class="card copilot"><span class="bar"></span><div class="ct">sessionStart</div><p>New or resumed session. Init env, validate state, set up resources. Observational.</p></div>
+      <div class="card copilot"><span class="bar"></span><div class="ct">sessionEnd</div><p>Session completes / terminates. Cleanup, archive logs, notify. Observational.</p></div>
+      <div class="card copilot"><span class="bar"></span><div class="ct">userPromptSubmitted</div><p>User submits a prompt. Audit & usage analysis. Cannot block.</p></div>
+      <div class="card copilot"><span class="bar"></span><div class="ct">preToolUse ⚑</div><p><strong>The control hook.</strong> Returns <code style="font-family:var(--mono)">permissionDecision</code>: allow / deny / ask.</p></div>
+      <div class="card copilot"><span class="bar"></span><div class="ct">postToolUse</div><p>After a tool returns. Log results, scan outputs. Observational.</p></div>
+      <div class="card copilot"><span class="bar"></span><div class="ct">errorOccurred</div><p>Fires on error. Forensics & alerting. Observational.</p></div>
+    </div>
+    <div class="reveal note" style="border-color:var(--copilot)">A broader 8-event set (adding Stop, SubagentStart/Stop, PreCompact) is appearing in the VS Code preview; the six above are the GA Copilot CLI surface.</div>
+  </section>
+
+  <!-- 14 COMPARISON -->
+  <section class="slide">
+    <div class="reveal kicker">07 · Side by side</div>
+    <h2 class="reveal">Which events live where</h2>
+    <div class="reveal body">
+      <table class="tbl">
+        <thead><tr>
+          <th>Event</th>
+          <th class="hc1">Claude Code</th>
+          <th class="hc2">Codex CLI</th>
+          <th class="hc3">Copilot CLI</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>SessionStart</td><td class="yes">●</td><td class="yes">●</td><td class="yes">● <span style="color:var(--faint)">sessionStart</span></td></tr>
+          <tr><td>SessionEnd</td><td class="yes">●</td><td class="no">—</td><td class="yes">● <span style="color:var(--faint)">sessionEnd</span></td></tr>
+          <tr><td>UserPromptSubmit</td><td class="yes">●</td><td class="yes">●</td><td class="yes">● <span style="color:var(--faint)">…Submitted</span></td></tr>
+          <tr><td>PreToolUse <span style="color:var(--faint)">(block)</span></td><td class="yes">● all tools</td><td class="part">◐ Bash only</td><td class="yes">● all tools</td></tr>
+          <tr><td>PostToolUse</td><td class="yes">●</td><td class="part">◐ Bash only</td><td class="yes">●</td></tr>
+          <tr><td>Stop</td><td class="yes">●</td><td class="yes">●</td><td class="no">—</td></tr>
+          <tr><td>SubagentStart / Stop</td><td class="yes">●</td><td class="part">◐ partial</td><td class="no">—</td></tr>
+          <tr><td>PreCompact / PostCompact</td><td class="yes">●</td><td class="part">◐ partial</td><td class="no">—</td></tr>
+          <tr><td>errorOccurred</td><td class="no">—</td><td class="no">—</td><td class="yes">●</td></tr>
+          <tr><td>Notification</td><td class="yes">●</td><td class="part">◐ notify cfg</td><td class="no">—</td></tr>
+        </tbody>
+      </table>
+      <div class="legend">
+        <span><b class="yes">●</b> supported</span>
+        <span><b class="part">◐</b> partial / experimental</span>
+        <span><b class="no">—</b> not available</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 15 EXIT CODES / JSON -->
+  <section class="slide">
+    <div class="reveal kicker">08 · Communication</div>
+    <h2 class="reveal">How a hook talks back</h2>
+    <p class="reveal lead">Two channels: simple <strong>exit codes</strong>, or structured <strong>JSON on stdout</strong> for fine-grained control.</p>
+    <div class="reveal twocol" style="margin-top:22px">
+      <div>
+        <div class="minih"><span class="sw" style="background:var(--phos)"></span>Exit codes</div>
+        <pre><span class="k">0</span>  <span class="cm">→ success; stdout may add context</span>
+<span class="d">2</span>  <span class="cm">→ blocking error; stderr → model</span>
+*  <span class="cm">→ non-blocking error, continue</span></pre>
+        <p class="lead" style="font-size:14px;margin-top:12px">Note: only exit <code style="font-family:var(--mono);color:var(--phos)">2</code> blocks — exit <code style="font-family:var(--mono);color:var(--red)">1</code> is treated as a non-blocking warning.</p>
+      </div>
+      <div>
+        <div class="minih"><span class="sw" style="background:var(--phos)"></span>JSON decision (PreToolUse)</div>
+        <pre>{
+  <span class="k">"hookSpecificOutput"</span>: {
+    <span class="k">"hookEventName"</span>: <span class="s">"PreToolUse"</span>,
+    <span class="k">"permissionDecision"</span>: <span class="d">"deny"</span>,
+    <span class="k">"permissionDecisionReason"</span>:
+        <span class="s">"Destructive command blocked"</span>
+  }
+}</pre>
+        <p class="lead" style="font-size:14px;margin-top:12px">Decisions: <em>allow · deny · ask · defer</em> (+ rewrite input on Claude Code).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 16 EXAMPLE SESSIONSTART -->
+  <section class="slide">
+    <div class="reveal kicker">09 · Example A</div>
+    <h2 class="reveal">SessionStart in practice</h2>
+    <p class="reveal lead">Run once when a session begins — perfect for loading context and preparing the environment.</p>
+    <div class="reveal pillrow">
+      <span class="pill">Inject current git branch + status</span>
+      <span class="pill">Persist env vars for the session</span>
+      <span class="pill">Audit-log session start</span>
+      <span class="pill">Validate project state</span>
+    </div>
+    <div class="reveal" style="margin-top:20px">
+      <div class="codehdr"><span class="sw" style="background:var(--claude)"></span>Claude Code — inject branch context (.claude/settings.json)</div>
+      <pre>{
+  <span class="k">"hooks"</span>: { <span class="k">"SessionStart"</span>: [{ <span class="k">"hooks"</span>: [{
+    <span class="k">"type"</span>: <span class="s">"command"</span>,
+    <span class="k">"command"</span>: <span class="s">"echo '{\"additionalContext\":\"Branch: '$(git branch --show-current)'\"}'"</span>
+  }]}]}
+}</pre>
+    </div>
+    <div class="reveal" style="margin-top:14px">
+      <div class="codehdr"><span class="sw" style="background:var(--copilot)"></span>Copilot CLI — audit log, cross-platform (.github/hooks/audit.json)</div>
+      <pre>{ <span class="k">"version"</span>: 1, <span class="k">"hooks"</span>: { <span class="k">"sessionStart"</span>: [{ <span class="k">"type"</span>: <span class="s">"command"</span>,
+  <span class="k">"bash"</span>: <span class="s">"echo \"start $(date)\" &gt;&gt; logs/session.log"</span>,
+  <span class="k">"powershell"</span>: <span class="s">"Add-Content logs/session.log \"start $(Get-Date)\""</span> }]}}}</pre>
+    </div>
+  </section>
+
+  <!-- 17 EXAMPLE PRETOOLUSE -->
+  <section class="slide">
+    <div class="reveal kicker">10 · Example B</div>
+    <h2 class="reveal">PreToolUse in practice</h2>
+    <p class="reveal lead">The universal control gate — inspect the pending tool call and <em>deny</em> it before anything runs.</p>
+    <div class="reveal pillrow">
+      <span class="pill">Block rm -rf / DROP TABLE</span>
+      <span class="pill">Protect secrets &amp; .env files</span>
+      <span class="pill">Require review for prod ops</span>
+      <span class="pill">Prompt-judge risky calls (Claude)</span>
+    </div>
+    <div class="reveal" style="margin-top:20px">
+      <div class="codehdr"><span class="sw" style="background:var(--copilot)"></span>Copilot CLI — deny destructive Bash (preToolUse script)</div>
+      <pre><span class="cm">#!/bin/bash</span>
+INPUT=$(cat); CMD=$(echo "$INPUT" | jq -r '.toolArgs.command')
+<span class="k">if</span> echo "$CMD" | grep -qE 'rm\s+-rf'; <span class="k">then</span>
+  echo '{<span class="k">"permissionDecision"</span>:<span class="d">"deny"</span>,<span class="k">"permissionDecisionReason"</span>:<span class="s">"rm -rf blocked"</span>}'
+<span class="k">else</span> echo '{<span class="k">"permissionDecision"</span>:<span class="s">"allow"</span>}'; <span class="k">fi</span></pre>
+    </div>
+    <div class="reveal" style="margin-top:14px">
+      <div class="codehdr"><span class="sw" style="background:var(--claude)"></span>Claude Code — semantic gate via prompt hook</div>
+      <pre>{ <span class="k">"type"</span>: <span class="s">"prompt"</span>, <span class="k">"prompt"</span>: <span class="s">"Evaluate if this tool use is safe: $TOOL_INPUT"</span>, <span class="k">"timeout"</span>: 30 }</pre>
+    </div>
+  </section>
+
+  <!-- 18 EXAMPLE STOP -->
+  <section class="slide">
+    <div class="reveal kicker">11 · Example C</div>
+    <h2 class="reveal">Stop in practice</h2>
+    <p class="reveal lead">Fires when the agent thinks it's finished. Block it to enforce a quality gate, or send it back to keep working.</p>
+    <div class="reveal pillrow">
+      <span class="pill">Gate completion until tests pass</span>
+      <span class="pill">Force another pass on failures</span>
+      <span class="pill">Notify when truly done</span>
+    </div>
+    <div class="reveal" style="margin-top:20px">
+      <div class="codehdr"><span class="sw" style="background:var(--claude)"></span>Claude Code — don't stop while tests are red (exit-code form)</div>
+      <pre><span class="cm">#!/bin/bash</span>  <span class="cm"># Stop hook</span>
+<span class="k">if</span> ! npm test --silent; <span class="k">then</span>
+  echo "Tests failing — keep going." &gt;&amp;2
+  <span class="k">exit</span> <span class="d">2</span>   <span class="cm"># blocks the stop; conversation continues</span>
+<span class="k">fi</span></pre>
+    </div>
+    <div class="reveal" style="margin-top:14px">
+      <div class="codehdr"><span class="sw" style="background:var(--codex)"></span>Codex — Stop "block" creates a continuation prompt (JSON on stdout)</div>
+      <pre>{ <span class="k">"decision"</span>: <span class="d">"block"</span>, <span class="k">"reason"</span>: <span class="s">"Run one more pass over the failing tests."</span> }</pre>
+    </div>
+    <div class="reveal note">In Codex, a blocked <code style="font-family:var(--mono);color:var(--phos)">Stop</code> turns the <code style="font-family:var(--mono);color:var(--phos)">reason</code> into a fresh user prompt; in Claude Code, exit 2 simply continues the turn.</div>
+  </section>
+
+  <!-- 19 SECURITY -->
+  <section class="slide">
+    <div class="reveal kicker">12 · Operate safely</div>
+    <h2 class="reveal">Security &amp; best practices</h2>
+    <div class="reveal grid2" style="margin-top:8px">
+      <ul class="feat">
+        <li><strong>No sandbox.</strong> Hooks run with your full user permissions. Treat them like production code and review every line.</li>
+        <li><strong>Use <code style="font-family:var(--mono);color:var(--phos)">exit 2</code> to enforce.</strong> A policy hook that exits 1 fails open — the action proceeds anyway.</li>
+        <li><strong>Keep them small &amp; fast.</strong> They run on every matching event; a slow hook stalls the whole session.</li>
+      </ul>
+      <ul class="feat">
+        <li><strong>Commit team guardrails</strong> to project config (Claude) or the repo's default branch (Copilot) so everyone shares the same gates.</li>
+        <li><strong>Mind the trust model.</strong> Codex requires hooks to be <em>trusted</em>; project-local hooks load only for trusted layers.</li>
+        <li><strong>Validate &amp; quote input.</strong> Parse the stdin JSON with <code style="font-family:var(--mono);color:var(--phos)">jq</code>; never interpolate raw tool args into a shell.</li>
+      </ul>
+    </div>
+    <div class="reveal note">Golden rule: write what the agent <b>may</b> do as code. A hook that returns <code style="font-family:var(--mono);color:var(--phos)">deny</code> is certainty; a sentence in an instructions file is a hope.</div>
+  </section>
+
+  <!-- 20 TAKEAWAYS -->
+  <section class="slide">
+    <div class="reveal kicker">Wrap-up</div>
+    <h2 class="reveal">Takeaways</h2>
+    <div class="reveal grid3" style="margin-top:14px">
+      <div class="card claude"><span class="bar"></span><div class="ct">Claude Code</div><p>Richest system: 20+ events, 5 handler types, prompt/agent judgment, allow/deny/ask/defer + input rewrite. The reference implementation.</p></div>
+      <div class="card codex"><span class="bar"></span><div class="ct">Codex CLI</div><p>Experimental &amp; config-native (TOML/JSON). Command hooks, Bash-focused PreToolUse, Stop-as-continuation. Trust-gated, no Windows yet.</p></div>
+      <div class="card copilot"><span class="bar"></span><div class="ct">Copilot CLI</div><p>Repo-native &amp; team-shared via git. 6 events, command-only, cross-platform bash+pwsh. Only preToolUse blocks.</p></div>
+    </div>
+    <div class="reveal" style="margin-top:26px;display:flex;flex-direction:column;gap:12px">
+      <ul class="feat">
+        <li><strong>Same mental model everywhere:</strong> event → matcher → handler, talking back via exit codes &amp; JSON.</li>
+        <li><strong>PreToolUse is the universal control point;</strong> SessionStart and Stop are the universal context + completion points.</li>
+        <li><strong>Hooks turn intent into enforcement</strong> — the deterministic shell around a probabilistic agent.</li>
+      </ul>
+    </div>
+    <div class="reveal" style="margin-top:24px;font-family:var(--mono);color:var(--phos);font-size:15px">$ on_hook() { echo "ship it." }<span class="blink" style="color:var(--phos)">▍</span></div>
+  </section>
+
+</div>
+
+<div class="hint">← → / space to navigate</div>
+
+<div class="nav">
+  <div class="progress"><i id="bar"></i></div>
+  <span class="counter" id="counter">01 / 20</span>
+  <div class="navbtns">
+    <button class="nb" id="prev" aria-label="previous">‹</button>
+    <button class="nb" id="next" aria-label="next">›</button>
+  </div>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const bar=document.getElementById('bar');
+  const counter=document.getElementById('counter');
+  const prev=document.getElementById('prev');
+  const next=document.getElementById('next');
+  const tbTitle=document.getElementById('tb-title');
+  const titles=['title','intro.md','enforce.md','anatomy.json','lifecycle','handlers','taxonomy','claude/overview','claude/events','codex/overview','codex/events','copilot/overview','copilot/events','compare.tbl','io.sh','ex_sessionstart','ex_pretooluse','ex_stop','security.md','takeaways'];
+  let i=0;
+  function render(){
+    slides.forEach((s,n)=>s.classList.toggle('active',n===i));
+    const pct=((i+1)/slides.length)*100;
+    bar.style.width=pct+'%';
+    counter.textContent=String(i+1).padStart(2,'0')+' / '+String(slides.length).padStart(2,'0');
+    prev.disabled=i===0; next.disabled=i===slides.length-1;
+    tbTitle.textContent=titles[i]||'hooks.json';
+  }
+  function go(n){i=Math.max(0,Math.min(slides.length-1,n));render();}
+  next.onclick=()=>go(i+1);
+  prev.onclick=()=>go(i-1);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(i+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+    else if(e.key==='Home'){go(0);} else if(e.key==='End'){go(slides.length-1);}
+  });
+  let sx=0;
+  document.addEventListener('touchstart',e=>sx=e.changedTouches[0].clientX,{passive:true});
+  document.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>50)go(i+(dx<0?1:-1));},{passive:true});
+  render();
+</script>
+</body>
+</html>
