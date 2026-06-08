@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Standardizing Copilot Customization — AGENTS.md + Skills</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0c1014;
+    --panel:#141a21;
+    --panel-2:#0a0e12;
+    --line:#222c36;
+    --ink:#e9eff5;
+    --muted:#8a98a6;
+    --agents:#f5b841;   /* AGENTS.md = amber */
+    --skills:#54d4c4;   /* Skills = teal */
+    --danger:#ff6b6b;
+    --display:'Bricolage Grotesque', sans-serif;
+    --body:'IBM Plex Sans', sans-serif;
+    --mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--body);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* subtle grid texture */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size:64px 64px;
+    opacity:.18;
+    mask-image:radial-gradient(ellipse 90% 80% at 50% 40%, #000 30%, transparent 100%);
+  }
+  .deck{position:relative;height:100vh;width:100vw;z-index:1}
+  .slide{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:clamp(2rem,6vw,6.5rem);
+    opacity:0;visibility:hidden;
+    transition:opacity .45s ease;
+    pointer-events:none;
+  }
+  .slide.active{opacity:1;visibility:visible;pointer-events:auto}
+  .slide.active .reveal{animation:rise .6s cubic-bezier(.2,.7,.2,1) backwards}
+  .slide.active .reveal:nth-child(1){animation-delay:.05s}
+  .slide.active .reveal:nth-child(2){animation-delay:.13s}
+  .slide.active .reveal:nth-child(3){animation-delay:.21s}
+  .slide.active .reveal:nth-child(4){animation-delay:.29s}
+  .slide.active .reveal:nth-child(5){animation-delay:.37s}
+  .slide.active .reveal:nth-child(6){animation-delay:.45s}
+  @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+
+  .eyebrow{
+    font-family:var(--mono);font-size:.78rem;letter-spacing:.28em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:1.4rem;
+    display:flex;align-items:center;gap:.7rem;
+  }
+  .eyebrow::before{content:"";width:28px;height:2px;background:var(--agents)}
+  h1{font-family:var(--display);font-weight:800;line-height:.98;letter-spacing:-.02em;
+     font-size:clamp(2.6rem,7vw,6rem)}
+  h2{font-family:var(--display);font-weight:800;line-height:1.02;letter-spacing:-.015em;
+     font-size:clamp(2rem,4.6vw,3.4rem);margin-bottom:1.5rem}
+  h2 .amber{color:var(--agents)}
+  h2 .teal{color:var(--skills)}
+  .lede{font-size:clamp(1.05rem,1.7vw,1.45rem);color:var(--muted);max-width:62ch;line-height:1.5}
+  p{line-height:1.6}
+  strong{color:var(--ink);font-weight:600}
+  code{font-family:var(--mono);background:var(--panel-2);border:1px solid var(--line);
+       border-radius:5px;padding:.08em .42em;font-size:.86em;color:var(--ink)}
+  .amber-t{color:var(--agents)}
+  .teal-t{color:var(--skills)}
+
+  /* title slide */
+  .title-foot{margin-top:2.6rem;display:flex;gap:2.4rem;flex-wrap:wrap;align-items:center}
+  .pill{font-family:var(--mono);font-size:.82rem;border:1px solid var(--line);
+        border-radius:999px;padding:.5rem 1.1rem;display:inline-flex;gap:.55rem;align-items:center}
+  .dot{width:8px;height:8px;border-radius:50%}
+  .dot.a{background:var(--agents)} .dot.s{background:var(--skills)}
+
+  /* two-layer diagram */
+  .layers{display:grid;grid-template-columns:1fr 1fr;gap:1.4rem;margin-top:.6rem;max-width:1100px}
+  .layer{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:1.6rem 1.7rem;position:relative;overflow:hidden}
+  .layer::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+  .layer.a::before{background:var(--agents)} .layer.s::before{background:var(--skills)}
+  .layer h3{font-family:var(--display);font-size:1.5rem;margin-bottom:.2rem}
+  .layer .tag{font-family:var(--mono);font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.9rem;display:block}
+  .layer p{font-size:1rem;color:var(--muted)}
+  .layer .ex{font-family:var(--mono);font-size:.82rem;margin-top:1rem;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:.7rem .85rem}
+
+  /* generic list */
+  ul.clean{list-style:none;max-width:64ch;margin-top:.4rem}
+  ul.clean li{position:relative;padding-left:1.6rem;margin:.85rem 0;font-size:clamp(1rem,1.5vw,1.2rem);line-height:1.5;color:var(--ink)}
+  ul.clean li::before{content:"";position:absolute;left:0;top:.62em;width:9px;height:9px;border-radius:2px;background:var(--agents);transform:rotate(45deg)}
+  ul.clean.teal li::before{background:var(--skills)}
+  ul.clean li span.m{color:var(--muted)}
+
+  /* code block */
+  pre{font-family:var(--mono);background:var(--panel-2);border:1px solid var(--line);
+      border-radius:12px;padding:1.4rem 1.6rem;font-size:clamp(.78rem,1.05vw,.98rem);
+      line-height:1.65;overflow:auto;max-width:920px;max-height:62vh}
+  pre .c{color:#5f7488}                 /* comment / muted */
+  pre .k{color:var(--agents)}           /* key / amber */
+  pre .v{color:var(--skills)}           /* value / teal */
+  pre .p{color:#c9a8ff}                 /* path / accent */
+  .codecap{font-family:var(--mono);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.8rem}
+
+  /* mapping table */
+  table{border-collapse:collapse;width:100%;max-width:1050px;margin-top:.4rem;font-size:clamp(.92rem,1.3vw,1.12rem)}
+  th,td{text-align:left;padding:.95rem 1.1rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:var(--mono);font-size:.74rem;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:500}
+  td code{font-size:.84em}
+  .arrow{color:var(--muted);padding:0 .2rem}
+  .becomes{color:var(--skills);font-weight:600}
+  .becomes.a{color:var(--agents)}
+  td .note{display:block;font-size:.82em;color:var(--muted);margin-top:.25rem}
+
+  /* decision cards */
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:1.1rem;margin-top:.5rem;max-width:1050px}
+  .card{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:1.25rem 1.35rem}
+  .card .q{font-size:1.02rem;color:var(--muted);margin-bottom:.55rem;line-height:1.4}
+  .card .a{font-family:var(--display);font-weight:600;font-size:1.35rem}
+  .card.ag .a{color:var(--agents)} .card.sk .a{color:var(--skills)}
+  .card.inst .a{color:#c9a8ff} .card.pr .a{color:var(--ink)}
+
+  /* steps */
+  ol.steps{list-style:none;counter-reset:s;max-width:70ch;margin-top:.4rem}
+  ol.steps li{counter-increment:s;position:relative;padding-left:3rem;margin:1rem 0;font-size:clamp(1rem,1.5vw,1.18rem);line-height:1.5}
+  ol.steps li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:-.1em;
+    font-family:var(--mono);font-weight:600;color:var(--agents);font-size:1.05rem}
+
+  .callout{margin-top:1.6rem;border:1px solid var(--line);border-left:4px solid var(--danger);
+    background:rgba(255,107,107,.06);border-radius:8px;padding:.95rem 1.2rem;max-width:74ch}
+  .callout b{color:var(--danger)}
+  .callout span{color:var(--muted)}
+
+  /* chrome: progress, counter, nav */
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--agents);z-index:20;transition:width .4s ease}
+  .counter{position:fixed;top:1.5rem;right:1.7rem;font-family:var(--mono);font-size:.8rem;color:var(--muted);z-index:20;letter-spacing:.1em}
+  .counter b{color:var(--ink)}
+  .brandmark{position:fixed;top:1.4rem;left:1.7rem;font-family:var(--mono);font-size:.74rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);z-index:20}
+  .nav{position:fixed;bottom:1.4rem;right:1.7rem;display:flex;gap:.6rem;z-index:20}
+  .nav button{font-family:var(--mono);background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    width:42px;height:42px;border-radius:9px;cursor:pointer;font-size:1.1rem;transition:.18s;display:grid;place-items:center}
+  .nav button:hover{border-color:var(--agents);color:var(--agents)}
+  .nav button:disabled{opacity:.3;cursor:default;border-color:var(--line);color:var(--muted)}
+  .dots{position:fixed;bottom:1.7rem;left:1.7rem;display:flex;gap:.5rem;z-index:20}
+  .dots i{width:8px;height:8px;border-radius:50%;background:var(--line);cursor:pointer;transition:.2s;display:block}
+  .dots i.on{background:var(--agents);transform:scale(1.3)}
+  .hint{position:fixed;bottom:1.55rem;left:50%;transform:translateX(-50%);font-family:var(--mono);
+    font-size:.72rem;color:var(--muted);z-index:20;opacity:.7}
+  @media(max-width:760px){
+    .layers,.cards{grid-template-columns:1fr}
+    .hint{display:none}
+    .slide{padding:4.5rem 1.5rem 5rem}
+    pre{max-height:50vh}
+  }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="brandmark">AI Engineering · Tooling Standard</div>
+<div class="counter"><b id="cur">01</b> / <span id="tot">12</span></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 -->
+  <section class="slide active">
+    <div class="eyebrow reveal">The Hartford · Agent Tooling</div>
+    <h1 class="reveal">AGENTS.md<br><span style="color:var(--muted);font-weight:400">+</span> Skills</h1>
+    <p class="lede reveal" style="margin-top:1.6rem">One standard for customizing GitHub Copilot — and every other agent CLI we run. Stop scattering rules across vendor-specific files.</p>
+    <div class="title-foot reveal">
+      <span class="pill"><span class="dot a"></span>Conventions, always on</span>
+      <span class="pill"><span class="dot s"></span>Capabilities, on demand</span>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div class="eyebrow reveal">The problem</div>
+    <h2 class="reveal">Customization sprawl &amp; vendor lock-in</h2>
+    <p class="lede reveal">Copilot alone gives us four overlapping ways to inject rules:</p>
+    <ul class="clean reveal">
+      <li><code>.github/copilot-instructions.md</code> <span class="m">— repo-wide, always on</span></li>
+      <li><code>.github/instructions/*.instructions.md</code> <span class="m">— path-scoped</span></li>
+      <li><code>.github/prompts/*.prompt.md</code> <span class="m">— reusable slash commands</span></li>
+      <li><code>.github/agents/*.agent.md</code> <span class="m">— personas &amp; handoffs</span></li>
+    </ul>
+    <p class="lede reveal" style="margin-top:1.4rem">Two pains: they drift repo-to-repo, and most are <strong>Copilot/VS Code-only</strong>. We also run <code>claude</code>, <code>codex</code>, and <code>copilot</code> CLI — we need a layer <em>all</em> of them read.</p>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <div class="eyebrow reveal">The standard</div>
+    <h2 class="reveal">Two layers. That's it.</h2>
+    <div class="layers">
+      <div class="layer a reveal">
+        <span class="tag">Layer 1 · Always on</span>
+        <h3 class="amber-t">AGENTS.md</h3>
+        <p>How we build here. Conventions, stack versions, build/test commands, guardrails — loaded on every request.</p>
+        <div class="ex">"Use pwsh 7. Python ≥ 3.13. Never commit secrets."</div>
+      </div>
+      <div class="layer s reveal">
+        <span class="tag">Layer 2 · On demand</span>
+        <h3 class="teal-t">Skills</h3>
+        <p>How to do task X. Packaged, repeatable capability with bundled scripts &amp; references — loaded only when relevant.</p>
+        <div class="ex">"Run a Splunk→LogParq migration the way we do it."</div>
+      </div>
+    </div>
+    <p class="lede reveal" style="margin-top:1.5rem"><strong>Conventions are always on. Capabilities load when needed.</strong></p>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <div class="eyebrow reveal">Layer 1</div>
+    <h2 class="reveal"><span class="amber">AGENTS.md</span> — the README for agents</h2>
+    <ul class="clean reveal">
+      <li>Replaces <code>.github/copilot-instructions.md</code> — same job, broader reach.</li>
+      <li>Read by Copilot <span class="m">coding agent</span>, <span class="m">CLI</span>, and <span class="m">VS Code agent mode</span> — plus Claude, Codex &amp; others via the shared standard.</li>
+      <li>Nested files supported: the <strong>nearest AGENTS.md in the tree wins</strong> → clean per-package scoping in monorepos.</li>
+    </ul>
+    <div class="callout reveal">
+      <b>Migrate, don't duplicate.</b> <span>If both AGENTS.md and copilot-instructions.md exist at the root, the CLI loads <em>both</em> — they stack, they don't override. Move the content into AGENTS.md and delete the old file.</span>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <div class="eyebrow reveal">Layer 1 · example</div>
+    <h2 class="reveal">A minimal <span class="amber">AGENTS.md</span></h2>
+    <div class="reveal">
+    <pre>
+<span class="c"># AGENTS.md — repo root</span>
+
+<span class="k">## Stack</span>
+- PowerShell <span class="v">7+</span> (pwsh). Python <span class="v">≥ 3.13</span>. .NET <span class="v">8</span> / C# 12. Node <span class="v">≥ 24</span>.
+- Databases: Postgres <span class="v">≥ 16</span>, SQL Server <span class="v">2022</span>, DuckDB <span class="v">≥ 1.5</span>.
+
+<span class="k">## Conventions</span>
+- No aliases in committed PowerShell. Approved verbs only.
+- Async all the way in C#; never <span class="v">.Result</span> / <span class="v">.Wait()</span>.
+- All docs &amp; PRDs in Markdown. Never generate Office files.
+
+<span class="k">## Build &amp; validate</span>
+- Lint:  <span class="v">pwsh ./build/lint.ps1</span>
+- Test:  <span class="v">pwsh ./build/test.ps1</span>
+- Run these before proposing changes. Trust this file; only
+  explore if it's incomplete or wrong.</pre>
+    </div>
+    <p class="lede reveal" style="margin-top:1rem">Keep it tight — conventions, versions, commands, guardrails. Not a wiki.</p>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <div class="eyebrow reveal" style="--agents:var(--skills)">Layer 2</div>
+    <h2 class="reveal"><span class="teal">Skills</span> — packaged, portable capability</h2>
+    <ul class="clean teal reveal">
+      <li>A folder with a <code>SKILL.md</code> (frontmatter: <code>name</code> + <code>description</code>) plus optional <code>scripts/</code>, <code>references/</code>, <code>assets/</code>.</li>
+      <li>In Copilot: <code>.github/skills/&lt;name&gt;/</code> (repo) or <code>~/.copilot/skills/</code> (personal).</li>
+      <li><strong>Progressive disclosure:</strong> Copilot reads name + description first, loads the full instructions only when relevant, and pulls bundled resources on demand.</li>
+      <li><strong>Portable:</strong> the open Agent Skills standard — the same skill runs in VS Code, Copilot CLI, the coding agent, <em>and</em> Claude / Codex.</li>
+    </ul>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <div class="eyebrow reveal" style="--agents:var(--skills)">Layer 2 · anatomy</div>
+    <h2 class="reveal">What a <span class="teal">Skill</span> looks like</h2>
+    <div class="reveal">
+    <pre>
+<span class="p">.github/skills/logparq-migration/</span>
+├── <span class="k">SKILL.md</span>          <span class="c"># required: frontmatter + instructions</span>
+├── references/
+│   └── schema-map.md   <span class="c"># loaded on demand</span>
+└── scripts/
+    └── export.ps1      <span class="c"># bundled, executable</span>
+
+<span class="c"># SKILL.md frontmatter</span>
+<span class="c">---</span>
+<span class="k">name:</span> <span class="v">logparq-migration</span>
+<span class="k">description:</span> <span class="v">Migrate Splunk indexes to the DuckDB/Parquet</span>
+  <span class="v">LogParq tiered layout. Use when asked to move logging</span>
+  <span class="v">off Splunk or build a Parquet log pipeline.</span>
+<span class="c">---</span></pre>
+    </div>
+    <p class="lede reveal" style="margin-top:1rem">The <code>description</code> <em>is</em> the trigger — write it as "what + when to use."</p>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <div class="eyebrow reveal">The mapping</div>
+    <h2 class="reveal">Copilot primitive → our standard</h2>
+    <div class="reveal">
+    <table>
+      <thead><tr><th>Copilot today</th><th></th><th>Move to</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>copilot-instructions.md</code></td>
+          <td class="arrow">→</td>
+          <td><span class="becomes a">AGENTS.md</span><span class="note">Always-on conventions. Direct replacement.</span></td>
+        </tr>
+        <tr>
+          <td><code>*.prompt.md</code></td>
+          <td class="arrow">→</td>
+          <td><span class="becomes">Skill</span><span class="note">Pure upgrade — adds scripts, references, portability.</span></td>
+        </tr>
+        <tr>
+          <td><code>*.instructions.md</code> <span style="color:var(--muted)">(applyTo)</span></td>
+          <td class="arrow">→</td>
+          <td><span class="becomes">Skill</span> <span style="color:var(--muted)">— or keep</span><span class="note">Keep when a rule must <em>deterministically</em> fire on a file glob.</span></td>
+        </tr>
+        <tr>
+          <td><code>*.agent.md</code></td>
+          <td class="arrow">→</td>
+          <td><span style="color:var(--muted)">subagent (separate topic)</span><span class="note">Persona/handoffs — not a Skill, not in scope here.</span></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide">
+    <div class="eyebrow reveal">Determinism matters</div>
+    <h2 class="reveal">When to keep <span style="color:#c9a8ff">applyTo</span> instructions</h2>
+    <p class="lede reveal">Skills trigger on a <strong>semantic</strong> match — the model decides the description fits. <code>applyTo</code> triggers on a <strong>file glob</strong> — it fires every time, guaranteed. If a rule <em>must</em> apply whenever a path is touched, keep it as an instructions file.</p>
+    <div class="reveal">
+    <pre>
+<span class="c">--- .github/instructions/terraform.instructions.md ---</span>
+<span class="k">applyTo:</span> <span class="v">"**/*.tf,**/*.tfvars"</span>
+<span class="k">description:</span> <span class="v">Terraform standards</span>
+<span class="c">---</span>
+- Pin provider versions. No hardcoded secrets.
+- Every resource carries the standard tag block.
+- Run <span class="v">terraform fmt</span> + <span class="v">validate</span> before changes.</pre>
+    </div>
+    <p class="lede reveal" style="margin-top:1rem">Keep globs narrow and non-overlapping — Copilot resolves conflicts non-deterministically. Anything that applies <em>everywhere</em> belongs in AGENTS.md, not a <code>**</code> glob.</p>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide">
+    <div class="eyebrow reveal">Decision guide</div>
+    <h2 class="reveal">Where does this rule go?</h2>
+    <div class="cards">
+      <div class="card ag reveal">
+        <div class="q">Applies to every request, in every repo?</div>
+        <div class="a">AGENTS.md</div>
+      </div>
+      <div class="card sk reveal">
+        <div class="q">Repeatable multi-step task, needs scripts, or must work cross-tool?</div>
+        <div class="a">Skill</div>
+      </div>
+      <div class="card inst reveal">
+        <div class="q">Must deterministically fire on a file pattern?</div>
+        <div class="a">.instructions.md</div>
+      </div>
+      <div class="card pr reveal">
+        <div class="q">One-off chat task you might rerun occasionally?</div>
+        <div class="a">prompt — or just ask</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section class="slide">
+    <div class="eyebrow reveal">Why this wins</div>
+    <h2 class="reveal">One source of truth, zero lock-in</h2>
+    <ul class="clean reveal">
+      <li>AGENTS.md + Skills are the <strong>only</strong> layer read across <code>claude</code>, <code>codex</code>, and <code>copilot</code>.</li>
+      <li>Skills follow an <strong>open standard</strong> — write once, run on every compatible agent.</li>
+      <li>No re-authoring rules per vendor. No drift between what each tool "knows."</li>
+      <li>New hire opens any repo → the agent already knows how we build.</li>
+    </ul>
+    <p class="lede reveal" style="margin-top:1.3rem">The pitch isn't "Skills are more powerful." It's <strong>"instructions and prompt files lock us into one vendor's CLI."</strong></p>
+  </section>
+
+  <!-- 12 -->
+  <section class="slide">
+    <div class="eyebrow reveal">Do this now</div>
+    <h2 class="reveal">Rollout checklist</h2>
+    <ol class="steps reveal">
+      <li>Add <code>AGENTS.md</code> at each repo root. Move <code>copilot-instructions.md</code> content in, then <strong>delete the old file</strong>.</li>
+      <li>Convert <code>*.prompt.md</code> → Skills under <code>.github/skills/&lt;name&gt;/</code>. Write descriptions as "what + when."</li>
+      <li>Keep only <strong>glob-deterministic</strong> rules as <code>*.instructions.md</code>. Fold the rest into AGENTS.md.</li>
+      <li>Don't over-skill: one-line conventions live in AGENTS.md, not a micro-skill.</li>
+      <li>Confirm your IDE surface reads AGENTS.md before deleting (VS Code agent mode, CLI, coding agent ✓).</li>
+    </ol>
+  </section>
+
+</div>
+
+<div class="dots" id="dots"></div>
+<div class="hint">← → or Space to navigate</div>
+<div class="nav">
+  <button id="prev" aria-label="Previous">‹</button>
+  <button id="next" aria-label="Next">›</button>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const dotsWrap=document.getElementById('dots');
+  const prog=document.getElementById('progress');
+  const cur=document.getElementById('cur');
+  const total=slides.length;
+  document.getElementById('tot').textContent=String(total).padStart(2,'0');
+  let i=0;
+
+  slides.forEach((_,n)=>{
+    const d=document.createElement('i');
+    d.addEventListener('click',()=>go(n));
+    dotsWrap.appendChild(d);
+  });
+  const dots=[...dotsWrap.children];
+
+  function go(n){
+    i=Math.max(0,Math.min(total-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    cur.textContent=String(i+1).padStart(2,'0');
+    prog.style.width=((i+1)/total*100)+'%';
+    document.getElementById('prev').disabled=(i===0);
+    document.getElementById('next').disabled=(i===total-1);
+  }
+  document.getElementById('next').addEventListener('click',()=>go(i+1));
+  document.getElementById('prev').addEventListener('click',()=>go(i-1));
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(i+1)}
+    if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1)}
+    if(e.key==='Home')go(0); if(e.key==='End')go(total-1);
+  });
+  // touch swipe
+  let x0=null;
+  document.addEventListener('touchstart',e=>x0=e.touches[0].clientX,{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(x0===null)return;
+    const dx=e.changedTouches[0].clientX-x0;
+    if(Math.abs(dx)>50)go(i+(dx<0?1:-1));
+    x0=null;
+  },{passive:true});
+
+  go(0);
+</script>
+</body>
+</html>
